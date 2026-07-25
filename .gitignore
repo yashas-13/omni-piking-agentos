@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.js.map
+*.d.ts
+!src/dashboard/index.html
+.env
+.env.local
+*.log
+.DS_Store
+Thumbs.db
+*.apk
+*.aab
+*.idsig
+package-lock.json
+src/dashboard/index.html.bak
+dist/
+node_modules/

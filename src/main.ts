@@ -70,7 +70,6 @@ function registerDefaultAgents(harness: AgentHarness): void {
 async function main(): Promise<void> {
   console.log(`[${APP_NAME.toLowerCase()}] Starting ${APP_NAME} Core v${APP_VERSION}...`);
   ensureDirs();
-
   const registry = new ToolRegistry(DB_PATH);
   const cli = new CLIController();
   const installer = new InstallerManager(cli, registry);
@@ -86,19 +85,18 @@ async function main(): Promise<void> {
   await reasoningEngine.initialize();
   const openaiClient = new OpenAIClient();
   const chatEngine = new ChatEngine(planner, agentHarness, cli, registry, reasoningEngine, openaiClient);
-
   const terminalRenderer = new TerminalRenderer();
   const conversationState = new ConversationState(DB_PATH);
   const toolCallProcessor = new ToolCallProcessor();
   const sandboxManager = new SandboxManager(BASE_DIR, securityManager);
   const codeSearch = new CodeSearch();
   const shellOps = new ShellOperations();
-
   registerDefaultTools(registry);
   registerDefaultAgents(agentHarness);
 
   const port = parseInt(process.env.PORT || String(DEFAULT_PORT), 10);
-  const api = new APIServer({ port, host: '0.0.0.0' }, registry, installer, processManager, agentHarness, workspaceManager, downloadManager, planner, chatEngine, reasoningEngine, openaiClient, terminalRenderer, conversationState, toolCallProcessor, sandboxManager, codeSearch, shellOps, securityManager, updateManager, vmManager);
+  const host = process.env.HOST || (process.env.AGENTOS_API_KEY ? '0.0.0.0' : '127.0.0.1');
+  const api = new APIServer({ port, host }, registry, installer, processManager, agentHarness, workspaceManager, downloadManager, planner, chatEngine, reasoningEngine, openaiClient, terminalRenderer, conversationState, toolCallProcessor, sandboxManager, codeSearch, shellOps, securityManager, updateManager, vmManager);
   await api.start();
 
   const httpServer = api.getHttpServer();
@@ -113,12 +111,11 @@ async function main(): Promise<void> {
 
   const pluginManager = new PluginManager(PLUGINS_DIR, registry, agentHarness, planner);
   const loadedCount = await pluginManager.loadAll();
-  const toolCount = registry.listTools().length;
-  console.log(`[${APP_NAME.toLowerCase()}] Registered ${toolCount} tools, ${registry.listInstalled().length} installed`);
+  console.log(`[${APP_NAME.toLowerCase()}] Registered ${registry.listTools().length} tools, ${registry.listInstalled().length} installed`);
   console.log(`[${APP_NAME.toLowerCase()}] Loaded ${loadedCount} plugins`);
-  console.log(`[${APP_NAME.toLowerCase()}] API:    http://0.0.0.0:${port}`);
-  console.log(`[${APP_NAME.toLowerCase()}] WS:     ws://0.0.0.0:${port}/ws`);
-  console.log(`[${APP_NAME.toLowerCase()}] Dash:   http://localhost:${port}/dashboard`);
+  console.log(`[${APP_NAME.toLowerCase()}] API:    http://${host}:${port}`);
+  console.log(`[${APP_NAME.toLowerCase()}] WS:     ws://${host}:${port}/ws`);
+  console.log(`[${APP_NAME.toLowerCase()}] Dash:   http://${host}:${port}/dashboard`);
 
   let shuttingDown = false;
   const shutdown = async () => {

@@ -1,14 +1,14 @@
 {
   "name": "omni-piking",
   "version": "2.2.0",
-  "description": "Cross-platform AgentOS \u2014 CLI tool management and orchestration",
+  "description": "Cross-platform AgentOS — CLI tool management and orchestration",
   "type": "module",
   "main": "dist/main.js",
-  "bin": {
-    "agentos": "dist/main.js"
-  },
+  "bin": { "agentos": "dist/main.js" },
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && tsx --test tests/*.test.ts",
+    "check": "npm run build && npm test",
     "dev": "PORT=9420 tsx watch src/main.ts",
     "start": "PORT=9420 node dist/main.js"
   },

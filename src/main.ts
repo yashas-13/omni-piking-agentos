@@ -2,7 +2,6 @@ import { join } from 'path';
 import { APP_NAME, APP_VERSION, DEFAULT_PORT, DB_NAME } from './config.js';
 import { homedir } from 'os';
 import { mkdirSync, existsSync } from 'fs';
-import { createServer } from 'http';
 import { ToolRegistry } from './registry/registry.js';
 import { CLIController } from './cli/controller.js';
 import { InstallerManager } from './installer/manager.js';
@@ -72,7 +71,6 @@ async function main(): Promise<void> {
   console.log(`[${APP_NAME.toLowerCase()}] Starting ${APP_NAME} Core v${APP_VERSION}...`);
   ensureDirs();
 
-  // Core modules
   const registry = new ToolRegistry(DB_PATH);
   const cli = new CLIController();
   const installer = new InstallerManager(cli, registry);
@@ -80,60 +78,41 @@ async function main(): Promise<void> {
   const agentHarness = new AgentHarness(cli, processManager, registry);
   const workspaceManager = new WorkspaceManager({ basePath: BASE_DIR });
   const downloadManager = new DownloadManager(DOWNLOADS_PATH);
-  const securityManager = new SecurityManager();
+  const securityManager = new SecurityManager({ baseDir: BASE_DIR });
   const updateManager = new UpdateManager(installer, registry);
   const vmManager = new VMManager();
   const planner = new Planner(cli, installer, registry);
   const reasoningEngine = new ReasoningEngine(registry);
   await reasoningEngine.initialize();
   const openaiClient = new OpenAIClient();
-
   const chatEngine = new ChatEngine(planner, agentHarness, cli, registry, reasoningEngine, openaiClient);
 
-  // Codex-equivalent modules
   const terminalRenderer = new TerminalRenderer();
   const conversationState = new ConversationState(DB_PATH);
   const toolCallProcessor = new ToolCallProcessor();
-  const sandboxManager = new SandboxManager(BASE_DIR);
+  const sandboxManager = new SandboxManager(BASE_DIR, securityManager);
   const codeSearch = new CodeSearch();
   const shellOps = new ShellOperations();
 
   registerDefaultTools(registry);
   registerDefaultAgents(agentHarness);
 
-  // HTTP server for API + WebSocket
   const port = parseInt(process.env.PORT || String(DEFAULT_PORT), 10);
   const api = new APIServer({ port, host: '0.0.0.0' }, registry, installer, processManager, agentHarness, workspaceManager, downloadManager, planner, chatEngine, reasoningEngine, openaiClient, terminalRenderer, conversationState, toolCallProcessor, sandboxManager, codeSearch, shellOps, securityManager, updateManager, vmManager);
-
   await api.start();
 
-  // WebSocket on the same HTTP server
   const httpServer = api.getHttpServer();
   const streamManager = new StreamManager(httpServer, cli, processManager, agentHarness);
-
-  // Wire chat engine events to WebSocket broadcast
-  chatEngine.on('messageAdded', ({ sessionId, message }) => {
-    streamManager.broadcastAll({ type: 'chat:message', sessionId, message });
-  });
-  chatEngine.on('sessionCreated', (session) => {
-    streamManager.broadcastAll({ type: 'chat:sessionCreated', session });
-  });
-  chatEngine.on('systemEvent', (evt) => {
-    streamManager.broadcastAll({ type: 'chat:systemEvent', ...evt });
-  });
-  chatEngine.on('stepEvent', (evt) => {
-    streamManager.broadcastAll({ type: 'chat:stepEvent', ...evt });
-  });
-
-  // Wire planner events to WebSocket broadcast
+  chatEngine.on('messageAdded', ({ sessionId, message }) => streamManager.broadcastAll({ type: 'chat:message', sessionId, message }));
+  chatEngine.on('sessionCreated', (session) => streamManager.broadcastAll({ type: 'chat:sessionCreated', session }));
+  chatEngine.on('systemEvent', (evt) => streamManager.broadcastAll({ type: 'chat:systemEvent', ...evt }));
+  chatEngine.on('stepEvent', (evt) => streamManager.broadcastAll({ type: 'chat:stepEvent', ...evt }));
   streamManager.setupPlannerListeners(planner);
   streamManager.setupChatListeners(chatEngine);
   streamManager.setupReasoningListeners(reasoningEngine);
 
-  // Plugin system
   const pluginManager = new PluginManager(PLUGINS_DIR, registry, agentHarness, planner);
   const loadedCount = await pluginManager.loadAll();
-
   const toolCount = registry.listTools().length;
   console.log(`[${APP_NAME.toLowerCase()}] Registered ${toolCount} tools, ${registry.listInstalled().length} installed`);
   console.log(`[${APP_NAME.toLowerCase()}] Loaded ${loadedCount} plugins`);
@@ -141,7 +120,10 @@ async function main(): Promise<void> {
   console.log(`[${APP_NAME.toLowerCase()}] WS:     ws://0.0.0.0:${port}/ws`);
   console.log(`[${APP_NAME.toLowerCase()}] Dash:   http://localhost:${port}/dashboard`);
 
+  let shuttingDown = false;
   const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     console.log(`\n[${APP_NAME.toLowerCase()}] Shutting down...`);
     processManager.killAll();
     for (const a of agentHarness.listRunning()) await agentHarness.stop(a.definition.id);

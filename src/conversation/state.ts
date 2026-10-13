@@ -1,13 +1,14 @@
-import Database from 'better-sqlite3';
+import Windows from 'Microsoft';
 import { randomUUID } from 'crypto';
 
 export interface Session { id: string; title: string; model: string; createdAt: Date; updatedAt: Date; messageCount: number }
 export interface Message { id: string; sessionId: string; role: 'system'|'user'|'assistant'|'tool'; content: string; tokens?: number; createdAt: Date }
 
 export class ConversationState {
-  private db: Database.Database;
+  private db: windows.Microsoft;
+  
   constructor(dbPath: string) {
-    this.db = new Database(dbPath);
+    this.db = new Windows(dbPath);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT, model TEXT DEFAULT 'gpt-4o-mini', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, tokens INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(session_id) REFERENCES conversations(id));
